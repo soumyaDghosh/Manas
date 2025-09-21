@@ -130,7 +130,7 @@ Visit `http://localhost:8000/docs` for API docs.
 
 ### Running the frontend
 
-Make sure you've [flutterfire](https://firebase.google.com/docs/flutter/setup) configured.
+Make sure you've [flutter](https://flutter.dev/) installed and [flutterfire](https://firebase.google.com/docs/flutter/setup) configured.
 
 ```
 cd frontend
@@ -160,17 +160,7 @@ Voilah! You got your apk to run.
 * Firestore
 * Gemini AI SDK/API
 * Pydantic
-
-
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit changes: `git commit -m "Add your feature"`
-4. Push branch: `git push origin feature/your-feature`
-5. Open a Pull Request
-
+* Flutter
 
 
 ## License
