@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "353252032802",
+    "project_id": "manas-backend",
+    "storage_bucket": "manas-backend.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:353252032802:android:98b2c899550d4d57d1657b",
+        "android_client_info": {
+          "package_name": "com.example.manas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGmeQQ_VRCa4GE3B-M7gq_03oniOS9w5M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
