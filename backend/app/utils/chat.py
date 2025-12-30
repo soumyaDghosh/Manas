@@ -1,15 +1,17 @@
-from collections import Counter
-import json
 from google import genai
+from loguru import logger
 
+from app.config.settings import settings
 from app.models.chat import MoodAnalysisResult, ConversationMessage
 from app.models.session import SessionModel
 
-class SessionAnalyzer():
+
+class SessionAnalyzer:
     """
     This class provides methods to analyze a session's mood data
     and summarize the main mood and counts.
     """
+
     PROMPT_TEMPLATE = """
     # SYSTEM INSTRUCTIONS:
     ## 1. Core Persona & Role
@@ -87,19 +89,24 @@ class SessionAnalyzer():
     Mood History (JSON format):
     {mood_history}
     """
-    def __init__(self, gemini_api_key: str):
-        self._model = 'gemini-2.0-flash-001'
-        self._client = genai.Client(api_key=gemini_api_key)
 
-    def summarize(self, conversation_history: list[ConversationMessage], mood_history: list[MoodAnalysisResult]) -> dict:
+    def __init__(self):
+        self._model = "gemini-2.5-flash"
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+    def summarize(
+        self,
+        conversation_history: list[ConversationMessage],
+        mood_history: list[MoodAnalysisResult],
+    ) -> SessionModel:
         prompt = self.PROMPT_TEMPLATE.format(
             conversation_history=[h.model_dump_json() for h in conversation_history],
-            mood_history=[m.model_dump_json() for m in mood_history]
+            mood_history=[m.model_dump_json() for m in mood_history],
         )
         response = self._client.models.generate_content(
             model=self._model, contents=prompt
         )
-        return SessionModel.parse_json_markdown(response.text)
+        return SessionModel.parse_json_markdown(str(response.text))
 
 
 class MoodAnalyzer:
@@ -107,6 +114,7 @@ class MoodAnalyzer:
     This class provides sentiment analysis and empathetic response generation
     using Google's Gemini AI with comprehensive error handling and logging.
     """
+
     PROMPT_TEMPLATE = """
       # SYSTEM INSTRUCTIONS:
 
@@ -180,14 +188,17 @@ class MoodAnalyzer:
       **User's Latest Message:**
       {final_sentence}
     """
-    def __init__(self, gemini_api_key: str):
+
+    def __init__(self):
         """
         Initialize the MoodAnalyzer with a Gemini AI client.
         """
-        self._model = 'gemini-2.0-flash-001'
-        self._client = genai.Client(api_key=gemini_api_key)
+        self._model = "gemini-2.5-flash"
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-    def analyze(self, text: str, history: list) -> MoodAnalysisResult:
+    def analyze(
+        self, text: str, history: list[ConversationMessage]
+    ) -> MoodAnalysisResult:
         """
         Analyze the mood of the given text and generate an empathetic reply.
 
@@ -198,15 +209,16 @@ class MoodAnalyzer:
             MoodAnalysisResult: A dictionary with keys 'mood', 'confidence', and 'reply'.
         """
         prompt = self.PROMPT_TEMPLATE.format(
-            conversation_history=[
-                json.loads(h) for h in history
-            ],
-            final_sentence=text
+            conversation_history=[h.model_dump_json() for h in history],
+            final_sentence=text,
         )
+        logger.info("analyzing with prompt")
 
-        print(f"{prompt=}")
-        response = self._client.models.generate_content(
-            model=self._model, contents=prompt
-        )
-        return MoodAnalysisResult.parse_json_markdown(response.text)
-
+        try:
+            response = self._client.models.generate_content(
+                model=self._model, contents=prompt
+            )
+        except Exception as e:
+            logger.error(f"Error during Gemini API call: {str(e)}")
+            raise
+        return MoodAnalysisResult.parse_json_markdown(str(response.text))

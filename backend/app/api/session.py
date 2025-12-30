@@ -1,16 +1,23 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Depends
 from app.utils.auth import verify_firebase_token
 from app.models.chat import ChatInput, ConversationMessage, MoodAnalysisResult
 from app.models.session import SessionModel, SessionsResponse
 from app.utils.chat import MoodAnalyzer, SessionAnalyzer
-from redis import Redis
+from app.utils.redis import RedisService
 from datetime import datetime
-import json
 
 router = APIRouter()
 
+
 @router.post("/process", status_code=202, response_model=MoodAnalysisResult)
-def process_text(request: Request, data: ChatInput, uid: str = Depends(verify_firebase_token)):
+async def process_text(
+    request: Request,
+    bg_tasks: BackgroundTasks,
+    data: ChatInput = Query(..., min_length=10),
+    uid: str = Depends(verify_firebase_token),
+    redis_service: RedisService = Depends(RedisService.get_service),
+    mood_analyzer: MoodAnalyzer = Depends(MoodAnalyzer),
+):
     """
     Process user input text to analyze mood and generate empathetic reply.
 
@@ -25,31 +32,28 @@ def process_text(request: Request, data: ChatInput, uid: str = Depends(verify_fi
     Raises:
         HTTPException: 400 for bad input, 500 for processing errors.
     """
-    redis_db: Redis = request.app.state.redis_db
-    input_text = data.text
+    input_text: str = data.text
     if not input_text.strip():
         raise HTTPException(status_code=400, detail="Input text cannot be empty.")
 
-    chat_history = redis_db.lrange(f"user:{uid}:chat_history", 0, -1)
-    mood_analyzer = MoodAnalyzer(
-        gemini_api_key=request.app.state.gemini_api_key
-    )
-    mood = mood_analyzer.analyze(
-        text=input_text,
-        history=[h for h in chat_history]
-    )
+    history = await redis_service.get_chat_history(uid)
+    mood = mood_analyzer.analyze(text=input_text, history=history)
+
     chat = ConversationMessage(
-        message=input_text,
-        reply=mood.reply,
-        timestamp=data.timestamp
+        message=input_text, reply=mood.reply, timestamp=data.timestamp
     )
-    redis_db.rpush(f"user:{uid}:session_moods", mood.model_dump_json())
-    redis_db.rpush(f"user:{uid}:chat_history", chat.model_dump_json())
+    bg_tasks.add_task(redis_service.add_chat_history, uid, chat)
+    bg_tasks.add_task(redis_service.add_session_moods, uid, mood)
     return mood
 
 
 @router.post("/end-session", response_model=SessionModel)
-def end_session(request: Request, uid: str = Depends(verify_firebase_token)):
+async def end_session(
+    request: Request,
+    uid: str = Depends(verify_firebase_token),
+    redis_service: RedisService = Depends(RedisService.get_service),
+    session_analyzer: SessionAnalyzer = Depends(SessionAnalyzer),
+):
     """
     End the current session, summarize the mood, and store the session in Firestore.
 
@@ -63,34 +67,31 @@ def end_session(request: Request, uid: str = Depends(verify_firebase_token)):
     Raises:
         HTTPException: 404 if no session data, 500 for processing errors.
     """
-    redis_db: Redis = request.app.state.redis_db
-    session_moods_raw = redis_db.lrange(f"user:{uid}:session_moods", 0, -1)
-    chat_history_raw = redis_db.lrange(f"user:{uid}:chat_history", 0, -1)
 
+    session_moods: list[MoodAnalysisResult] = await redis_service.get_session_moods(uid)
+    chat_history: list[ConversationMessage] = await redis_service.get_chat_history(uid)
 
-    if not session_moods_raw:
-        redis_db.delete(f"user:{uid}:session_moods")
-        redis_db.delete(f"user:{uid}:chat_history")
-        raise HTTPException(status_code=404, detail="No data in the current session to process. Please call /api/v1/process first.")
+    if not session_moods or not chat_history:
+        redis_service.clear_db(uid)
+        raise HTTPException(
+            status_code=424,
+            detail="No data in the current session to process. Please call /api/v1/process first.",
+        )
 
-    session_moods = list(map(MoodAnalysisResult.model_validate_json, session_moods_raw))
-    chat_history = list(map(ConversationMessage.model_validate_json, chat_history_raw))
-
-
-    session_analyzer = SessionAnalyzer(
-        gemini_api_key=request.app.state.gemini_api_key
-    )
     summary: SessionModel = session_analyzer.summarize(chat_history, session_moods)
-    redis_db.delete(f"user:{uid}:chat_history")
-    redis_db.delete(f"user:{uid}:session_moods")
+    redis_service.clear_db(uid)
 
     firestore_db = request.app.state.firestore_db
-    user_sessions = firestore_db.collection("users").document(uid).collection("sessions")
-    user_sessions.add({
-        "mood": summary.mood.value,
-        "summary": summary.summary,
-        "created_at": summary.created_at or datetime.now()
-    })
+    user_sessions = (
+        firestore_db.collection("users").document(uid).collection("sessions")
+    )
+    user_sessions.add(
+        {
+            "mood": summary.mood.value,
+            "summary": summary.summary,
+            "created_at": summary.created_at or datetime.now(),
+        }
+    )
     return summary
 
 
@@ -106,17 +107,18 @@ def get_sessions(request: Request, uid: str = Depends(verify_firebase_token)):
         SessionsResponse: List of past sessions.
     """
     firestore_db = request.app.state.firestore_db
-    user_sessions = firestore_db.collection("users").document(uid).collection("sessions")
+    user_sessions = (
+        firestore_db.collection("users").document(uid).collection("sessions")
+    )
 
     sessions = user_sessions.stream()
     session_list: list[SessionModel] = []
 
     for session in sessions:
         session_data = SessionModel(
-            id=session.id,
             mood=session.to_dict().get("mood", ""),
             summary=session.to_dict().get("summary", ""),
-            created_at=session.to_dict().get("created_at", datetime.now())
+            created_at=session.to_dict().get("created_at", datetime.now()),
         )
         session_list.append(session_data)
 
