@@ -1,7 +1,9 @@
 from enum import Enum
 
+
 class MoodCategory(str, Enum):
     """Enumeration of supported mood categories."""
+
     JOY = "joy"
     SADNESS = "sadness"
     ANGER = "anger"

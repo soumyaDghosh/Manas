@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.models.profile import Profile
 from app.utils.auth import verify_firebase_token
 from firebase_admin import auth
-from datetime import datetime, timezone
+from datetime import datetime
 
 router = APIRouter()
+
 
 @router.get("/profile", response_model=Profile)
 def get_profile(uid: str = Depends(verify_firebase_token)):
@@ -33,33 +34,23 @@ def get_profile(uid: str = Depends(verify_firebase_token)):
                 datetime.fromtimestamp(user.user_metadata.last_sign_in_timestamp / 1000)
                 if user.user_metadata.last_sign_in_timestamp
                 else None
-            )
+            ),
         )
 
         return profile
 
     except auth.UserNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"User with UID {uid} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"User with UID {uid} not found")
     except ValueError as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Error processing user data: {str(e)}"
+            status_code=500, detail=f"Error processing user data: {str(e)}"
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
+        raise HTTPException(status_code=500, detail=f"Internal server error {e}")
 
 
 @router.post("/profile/display-name")
-def set_display_name(
-    display_name: str,
-    uid: str = Depends(verify_firebase_token)
-):
+def set_display_name(display_name: str, uid: str = Depends(verify_firebase_token)):
     """
     Update the user's display name in Firebase Auth.
 
@@ -75,29 +66,18 @@ def set_display_name(
     """
     if not display_name or len(display_name) not in range(3, 100):
         raise HTTPException(
-            status_code=400,
-            detail="Display name must be between 3 and 100 characters"
+            status_code=400, detail="Display name must be between 3 and 100 characters"
         )
 
     try:
-        auth.update_user(
-            uid,
-            display_name=display_name
-        )
+        auth.update_user(uid, display_name=display_name)
         return "Profile updated successfully"
 
     except auth.UserNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"User with UID {uid} not found"
-        )
+        raise HTTPException(status_code=404, detail=f"User with UID {uid} not found")
     except ValueError as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Error processing user data: {str(e)}"
+            status_code=500, detail=f"Error processing user data: {str(e)}"
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
+        raise HTTPException(status_code=500, detail=f"Internal server error {e}")
