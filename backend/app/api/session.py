@@ -1,23 +1,25 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Depends
-from app.utils.auth import verify_firebase_token
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+
 from app.models.chat import ChatInput, ConversationMessage, MoodAnalysisResult
 from app.models.session import SessionModel, SessionsResponse
+from app.utils.auth import verify_firebase_token
 from app.utils.chat import MoodAnalyzer, SessionAnalyzer
 from app.utils.redis import RedisService
-from datetime import datetime
 
 router = APIRouter()
 
 
 @router.post("/process", status_code=202, response_model=MoodAnalysisResult)
 async def process_text(
-    request: Request,
     bg_tasks: BackgroundTasks,
-    data: ChatInput = Query(..., min_length=10),
-    uid: str = Depends(verify_firebase_token),
-    redis_service: RedisService = Depends(RedisService.get_service),
-    mood_analyzer: MoodAnalyzer = Depends(MoodAnalyzer),
-):
+    data: Annotated[ChatInput, Query(..., min_length=10)],
+    uid: Annotated[str, Depends(verify_firebase_token)],
+    redis_service: Annotated[RedisService, Depends(RedisService.get_service)],
+    mood_analyzer: Annotated[MoodAnalyzer, Depends(MoodAnalyzer)],
+) -> MoodAnalysisResult:
     """
     Process user input text to analyze mood and generate empathetic reply.
 
@@ -50,10 +52,10 @@ async def process_text(
 @router.post("/end-session", response_model=SessionModel)
 async def end_session(
     request: Request,
-    uid: str = Depends(verify_firebase_token),
-    redis_service: RedisService = Depends(RedisService.get_service),
-    session_analyzer: SessionAnalyzer = Depends(SessionAnalyzer),
-):
+    uid: Annotated[str, Depends(verify_firebase_token)],
+    redis_service: Annotated[RedisService, Depends(RedisService.get_service)],
+    session_analyzer: Annotated[SessionAnalyzer, Depends(SessionAnalyzer)],
+) -> SessionModel:
     """
     End the current session, summarize the mood, and store the session in Firestore.
 
@@ -96,7 +98,9 @@ async def end_session(
 
 
 @router.get("/sessions", response_model=SessionsResponse)
-def get_sessions(request: Request, uid: str = Depends(verify_firebase_token)):
+def get_sessions(
+    request: Request, uid: Annotated[str, Depends(verify_firebase_token)]
+) -> SessionsResponse:
     """
     Retrieve all past sessions for the authenticated user.
     Args:

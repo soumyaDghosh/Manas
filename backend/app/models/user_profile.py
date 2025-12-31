@@ -1,6 +1,6 @@
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime
+
+from pydantic import BaseModel
 
 
 class Profile(BaseModel):
@@ -10,6 +10,6 @@ class Profile(BaseModel):
 
     uid: str
     email: str
-    full_name: Optional[str] = None
+    full_name: str | None = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None

@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
-from datetime import datetime
-from app.models.enums import MoodCategory
 import re
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.models.enums import MoodCategory
 
 
 class SessionModel(BaseModel):
@@ -14,7 +16,7 @@ class SessionModel(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now())
 
     @classmethod
-    def parse_json_markdown(cls, s: str):
+    def parse_json_markdown(cls, s: str) -> "SessionModel":
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", s.strip(), flags=re.MULTILINE)
         return cls.model_validate_json(cleaned)
 

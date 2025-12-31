@@ -1,13 +1,17 @@
-from redis import Redis
+import logging
+from collections.abc import Awaitable
+
 from fastapi import Request
+from redis import Redis
+
 from app.config.settings import settings
 from app.models.chat import ConversationMessage, MoodAnalysisResult
-from typing import Awaitable
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 class RedisService:
-    def __init__(self):
+    def __init__(self) -> None:
         self._redis_client = Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
@@ -28,7 +32,7 @@ class RedisService:
         )
         logger.info("cleared the db")
 
-    def close(self):
+    def close(self) -> None:
         self._redis_client.close()
         logger.info("redis client closed")
 
@@ -41,11 +45,11 @@ class RedisService:
 
         return list(map(ConversationMessage.model_validate_json, result))
 
-    async def add_chat_history(self, user_id: str, chat: ConversationMessage):
+    async def add_chat_history(self, user_id: str, chat: ConversationMessage) -> None:
         self._redis_client.rpush(f"user:{user_id}:chat_history", chat.model_dump_json())
         logger.info("added chat history")
 
-    async def add_session_moods(self, user_id: str, mood: MoodAnalysisResult):
+    async def add_session_moods(self, user_id: str, mood: MoodAnalysisResult) -> None:
         self._redis_client.rpush(
             f"user:{user_id}:session_moods", mood.model_dump_json()
         )

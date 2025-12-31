@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
-from datetime import datetime
-from app.models.enums import MoodCategory
 import re
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.models.enums import MoodCategory
 
 
 class ChatInput(BaseModel):
@@ -10,7 +12,7 @@ class ChatInput(BaseModel):
     text: str
     timestamp: datetime
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.text)
 
 
@@ -30,6 +32,6 @@ class MoodAnalysisResult(BaseModel):
     reply: str = Field(..., min_length=1, description="Generated empathetic reply")
 
     @classmethod
-    def parse_json_markdown(cls, s: str):
+    def parse_json_markdown(cls, s: str) -> "MoodAnalysisResult":
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", s.strip(), flags=re.MULTILINE)
         return cls.model_validate_json(cleaned)

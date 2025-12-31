@@ -1,9 +1,17 @@
+import logging
+import time
+from typing import TYPE_CHECKING
+
 from google import genai
-from loguru import logger
 
 from app.config.settings import settings
-from app.models.chat import MoodAnalysisResult, ConversationMessage
+from app.models.chat import ConversationMessage, MoodAnalysisResult
 from app.models.session import SessionModel
+
+if TYPE_CHECKING:
+    from google.genai.types import GenerateContentResponse
+
+logger = logging.getLogger(__name__)
 
 
 class SessionAnalyzer:
@@ -90,7 +98,7 @@ class SessionAnalyzer:
     {mood_history}
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._model = "gemini-2.5-flash"
         self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -99,12 +107,17 @@ class SessionAnalyzer:
         conversation_history: list[ConversationMessage],
         mood_history: list[MoodAnalysisResult],
     ) -> SessionModel:
-        prompt = self.PROMPT_TEMPLATE.format(
+        prompt: str = self.PROMPT_TEMPLATE.format(
             conversation_history=[h.model_dump_json() for h in conversation_history],
             mood_history=[m.model_dump_json() for m in mood_history],
         )
-        response = self._client.models.generate_content(
+        duration: float = time.time()
+        response: GenerateContentResponse = self._client.models.generate_content(
             model=self._model, contents=prompt
+        )
+        duration = (time.time() - duration) * 1000
+        logger.info(
+            f"gemini_response model {self._model} response time {duration:.2f}ms, token count: {getattr(response.usage_metadata, 'total_token_count', 0)}"
         )
         return SessionModel.parse_json_markdown(str(response.text))
 
@@ -189,7 +202,7 @@ class MoodAnalyzer:
       {final_sentence}
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the MoodAnalyzer with a Gemini AI client.
         """
@@ -208,17 +221,22 @@ class MoodAnalyzer:
         Returns:
             MoodAnalysisResult: A dictionary with keys 'mood', 'confidence', and 'reply'.
         """
-        prompt = self.PROMPT_TEMPLATE.format(
+        prompt: str = self.PROMPT_TEMPLATE.format(
             conversation_history=[h.model_dump_json() for h in history],
             final_sentence=text,
         )
-        logger.info("analyzing with prompt")
 
         try:
-            response = self._client.models.generate_content(
+            duration = time.time()
+            response: GenerateContentResponse = self._client.models.generate_content(
                 model=self._model, contents=prompt
             )
-        except Exception as e:
-            logger.error(f"Error during Gemini API call: {str(e)}")
+            duration = (time.time() - duration) * 1000
+            logger.info(
+                f"gemini_response model {self._model} response time {duration:.2f} ms, token count: {getattr(response.usage_metadata, 'total_token_count', 0)}"
+            )
+        except Exception:
+            logger.exception("error during gemini api call")
             raise
-        return MoodAnalysisResult.parse_json_markdown(str(response.text))
+        else:
+            return MoodAnalysisResult.parse_json_markdown(str(response.text))
